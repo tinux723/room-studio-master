@@ -648,17 +648,23 @@ function zip(name, data){
   return new Blob([lh.buffer, nm, data, cd.buffer, nm, end.buffer], {type:"application/zip"});
 }
 let downloads = null;
-(async () => { try { downloads = await window.claude?.use?.("downloads"); } catch { downloads = null; }
-  if (!downloads) { $("dlBtn").disabled = true; $("dlStatus").textContent = "Saving isn't available in this view. Open the page in the Claude app or claude.ai."; } })();
+(async () => { try { downloads = await window.claude?.use?.("downloads"); } catch { downloads = null; } })();
+// Outside Claude, fall back to a normal browser download
+function browserSave(filename, blob){
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
 
 $("dlBtn").onclick = async () => {
-  if (!result || !downloads) return;
+  if (!result) return;
   const btn = $("dlBtn"); btn.disabled = true; $("dlStatus").textContent = "Preparing file…"; await tick();
   try {
     const safe = (mixName || "song").replace(/[^\w\- ]+/g,"").trim() || "song";
     const blob = zip(`${safe} (master).wav`, wav(result.master));
-    $("dlStatus").textContent = "Confirm the save when asked.";
-    await downloads.save({ filename: `${safe}-master.zip`, data: blob });
+    if (downloads) {
+      $("dlStatus").textContent = "Confirm the save when asked.";
+      await downloads.save({ filename: `${safe}-master.zip`, data: blob });
+    } else browserSave(`${safe}-master.zip`, blob);
     $("dlStatus").textContent = "Saved. Unzip it to get your mastered WAV.";
   } catch (e) {
     $("dlStatus").textContent = e?.code === "declined" ? "Save cancelled." : e?.code === "rate_limited" ? "A save prompt is already open." : "Couldn't save this time (" + (e?.code || "error") + ").";
